@@ -37,7 +37,6 @@ export async function searchMealsByName(query) {
     console.error("Failed to get meals:", error);
     return [];
   }
-
 }
 
 /**
@@ -78,10 +77,11 @@ export async function getMealById(id, attempts = 2) {
     }
   } catch (error) {
     if (attempts > 1) {
+      console.log(`Retrying... (${attempts - 1} attempts left)`);
       await new Promise(resolve => setTimeout(resolve, 1000))
       return getMealById(id, attempts - 1);
     }
-    console.error(`Cannot find meal after ${attempts} attepmts`, error);
+    console.error(`Cannot find meal after ${attempts} attempts`, error);
     return null;
   }
 }
@@ -121,15 +121,18 @@ export async function searchMealsByFirstLetter(letters) {
         const info = await response.json()
         return info.meals || [];
       } catch (error) {
-        console.error("An error was Occured", error)
+        console.error("An error occurred", error)
         return [];
       }
-    })
+    });
 
     const results = await Promise.all(map);
 
     const all = results.flat();
-    const onlyOne = Array.from(new Map(all.map(meal => meal?.idMeal ? [meal.idMeal, meal] : [null, null])).values()).filter(meal => meal !== null);
+    const onlyOne = Array.from(
+      new Map(all.map(meal => meal?.idMeal ? [meal.idMeal, meal] : [null, null]))
+      .values()
+    ).filter(meal => meal !== null);
 
     return onlyOne;
   } catch (error) {
@@ -179,14 +182,12 @@ export async function getMealsByIngredient(ingredient, timeoutMs = 5000) {
     return await Promise.race([promise, time]);
   } catch (error) {
     if (error instanceof Error && error.message === "cant found recipe on time") {
-      return "took too long";
+      return `The request for meals with ${ingredient} took too long. Please try again later.`;
     } else {
       console.error("Sorry, something went wrong: ", error);
-      return "An unexpected error has been occurred";
+      return [];
     }
   }
-
-
 }
 
 /**
@@ -211,17 +212,24 @@ export async function getRelatedRecipes(recipe, limit = 3) {
   // 7. Handle errors with try/catch
 
   try {
-    if (recipe.ok && recipe.strCategory) {
-      const promise = await fetch(`${BASE_URL}/filter.php?c=${encodeURIComponent(recipe.strCategory)}`)
-      if (!promise.ok) {
-        throw new Error(`category not found. status ${ans.status}`)
-      }
-      const ans = await response.json()
-
-      const filt = ans.meals.filter(meal => meal.idMeal !== recipe.idMeal);
-
-      return filt.slice(0, limit)
+    // Fix: Check for strCategory directly
+    if (!recipe || !recipe.strCategory) {
+      console.error("Invalid recipe object provided");
+      return [];
     }
+
+    const response = await fetch(`${BASE_URL}/filter.php?c=${encodeURIComponent(recipe.strCategory)}`);
+    
+    if (!response.ok) {
+      throw new Error(`Category not found. Status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    if (!data.meals) return [];
+    
+    const filtered = data.meals.filter(meal => meal.idMeal !== recipe.idMeal);
+    
+    return filtered.slice(0, limit);
   } catch (error) {
     console.error("Error fetching related recipes:", error.message);
     return [];
@@ -239,21 +247,20 @@ export async function getRandomMeal() {
   // 2. Handle the response (check if ok, parse JSON)
   // 3. Return the first meal or null if no meals
   // 4. Handle errors with try/catch
+  
+  // Fix: Completely rewrite this function which had incorrect implementation
   try {
-    if (recipe.ok && recipe.strCategory) {
-      const promise = await fetch(`${BASE_URL}/filter.php?c=${encodeURIComponent(recipe.strCategory)}`)
-      if (!promise.ok) {
-        throw new Error(`category not found. status ${ans.status}`)
-      }
-      const ans = await response.json()
-
-      const filt = ans.meals.filter(meal => meal.idMeal !== recipe.idMeal);
-
-      return filt.slice(0, limit)
+    const response = await fetch(`${BASE_URL}/random.php`);
+    
+    if (!response.ok) {
+      throw new Error(`Error fetching random meal. Status: ${response.status}`);
     }
+    
+    const data = await response.json();
+    return data.meals ? data.meals[0] : null;
   } catch (error) {
-    console.error("Error fetching related recipes:", error.message);
-    return [];
+    console.error("Error fetching random meal:", error.message);
+    return null;
   }
 }
 
